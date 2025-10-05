@@ -115,9 +115,9 @@ async def show_players(callback: types.CallbackQuery):
 # 🎯 ЗАПУСК ИГРЫ
 @dp.message(Command("start_game"))
 async def start_game_command(message: types.Message):
-    if len(waiting_players) < 4:
-        await message.answer(f"❌ Нужно минимум 4 игрока. Сейчас: {len(waiting_players)}")
-        return
+   if len(waiting_players) < 1:  # Изменил с 4 на 1 для теста
+    await message.answer(f"❌ Нужно минимум 1 игрок. Сейчас: {len(waiting_players)}")
+    return
     
     # Создаем уникальный ID для игры
     game_id = message.chat.id
