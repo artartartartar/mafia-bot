@@ -18,7 +18,6 @@ dp = Dispatcher()
 # 🎯 ХРАНИЛИЩЕ ДАННЫХ
 waiting_players = {}  # {user_id: {"name": "", "username": ""}}
 active_games = {}     # {chat_id: game_data}
-user_sessions = {}    # {user_id: current_chat_id}
 
 # 🎯 НАСТРОЙКА ТЕСТОВОГО РЕЖИМА
 def get_min_players():
@@ -27,18 +26,15 @@ def get_min_players():
 # 🎯 КОМАНДА /start
 @dp.message(Command("start"))
 async def start_command(message: types.Message):
-    user_id = message.from_user.id
-    user_sessions[user_id] = message.chat.id
-    
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="🎮 Присоединиться к игре", callback_data="join_game")],
         [InlineKeyboardButton(text="🚪 Выйти из лобби", callback_data="leave_lobby")],
         [InlineKeyboardButton(text="📖 Правила игры", callback_data="show_rules")],
         [InlineKeyboardButton(text="👥 Игроки в лобби", callback_data="show_players")],
-        [InlineKeyboardButton(text="🎯 Быстрая игра", callback_data="quick_start")]
+        [InlineKeyboardButton(text="🎯 Быстрая игра (ТЕСТ)", callback_data="quick_start")]
     ])
     
-    welcome_text = """
+    welcome_text = f"""
 🎮 <b>ДОБРО ПОЖАЛОВАТЬ В МАФИЮ!</b>
 
 Я - лучший бот для игры в Мафию в Telegram! 🕵️‍♂️
@@ -57,7 +53,8 @@ async def start_command(message: types.Message):
 3. Игроки присоединяются через кнопки
 4. Запусти игру: /start_game
 
-🎯 <i>Сейчас доступен тестовый режим - можно играть одному!</i>
+🎯 <i>Сейчас доступен ТЕСТОВЫЙ РЕЖИМ - можно играть одному!</i>
+<b>Минимум игроков: {get_min_players()}</b>
     """
     
     await message.answer(welcome_text, reply_markup=keyboard)
@@ -69,9 +66,6 @@ async def join_game(callback: types.CallbackQuery):
     user_name = callback.from_user.first_name
     username = callback.from_user.username or "Без username"
     
-    # Сохраняем сессию
-    user_sessions[user_id] = callback.message.chat.id
-    
     # Добавляем/обновляем игрока
     waiting_players[user_id] = {
         "name": user_name,
@@ -80,6 +74,7 @@ async def join_game(callback: types.CallbackQuery):
     }
     
     players_count = len(waiting_players)
+    min_players = get_min_players()
     
     await callback.answer(f"✅ Ты в игре, {user_name}!")
     
@@ -89,15 +84,18 @@ async def join_game(callback: types.CallbackQuery):
         [InlineKeyboardButton(text="🚪 Выйти из лобби", callback_data="leave_lobby")],
         [InlineKeyboardButton(text="📖 Правила игры", callback_data="show_rules")],
         [InlineKeyboardButton(text="👥 Игроки в лобби", callback_data="show_players")],
-        [InlineKeyboardButton(text="🎯 Быстрая игра", callback_data="quick_start")]
+        [InlineKeyboardButton(text="🎯 Быстрая игра (ТЕСТ)", callback_data="quick_start")]
     ])
+    
+    status = "✅ ГОТОВО К СТАРТУ!" if players_count >= min_players else "⏳ ОЖИДАНИЕ..."
     
     await callback.message.edit_text(
         f"✅ <b>ТЫ В ИГРЕ, {user_name}!</b>\n\n"
         f"👥 <b>Игроков в лобби:</b> {players_count}\n"
-        f"🎯 <b>Нужно для старта:</b> {get_min_players()}\n\n"
-        f"<i>Ждем остальных игроков... ⏳</i>\n\n"
-        f"Админ может запустить игру: /start_game",
+        f"🎯 <b>Нужно для старта:</b> {min_players}\n"
+        f"📊 <b>Статус:</b> {status}\n\n"
+        f"<i>Тестовый режим: {'ВКЛЮЧЕН' if TEST_MODE else 'ВЫКЛЮЧЕН'}</i>\n\n"
+        f"Запустить игру: /start_game",
         reply_markup=new_keyboard
     )
 
@@ -115,6 +113,7 @@ async def leave_lobby(callback: types.CallbackQuery):
         return
     
     players_count = len(waiting_players)
+    min_players = get_min_players()
     
     # Обновляем сообщение
     new_keyboard = InlineKeyboardMarkup(inline_keyboard=[
@@ -122,18 +121,19 @@ async def leave_lobby(callback: types.CallbackQuery):
         [InlineKeyboardButton(text="🚪 Выйти из лобби", callback_data="leave_lobby")],
         [InlineKeyboardButton(text="📖 Правила игры", callback_data="show_rules")],
         [InlineKeyboardButton(text="👥 Игроки в лобби", callback_data="show_players")],
-        [InlineKeyboardButton(text="🎯 Быстрая игра", callback_data="quick_start")]
+        [InlineKeyboardButton(text="🎯 Быстрая игра (ТЕСТ)", callback_data="quick_start")]
     ])
     
     await callback.message.edit_text(
-        f"🚪 <b>Ты вышел из лобби</b>\n\n"
+        f"🚪 <b>ТЫ ВЫШЕЛ ИЗ ЛОББИ</b>\n\n"
         f"👥 <b>Игроков в лобби:</b> {players_count}\n"
-        f"🎯 <b>Нужно для старта:</b> {get_min_players()}\n\n"
-        f"<i>Можешь присоединиться снова! 🔄</i>",
+        f"🎯 <b>Нужно для старта:</b> {min_players}\n\n"
+        f"<i>Тестовый режим: {'ВКЛЮЧЕН' if TEST_MODE else 'ВЫКЛЮЧЕН'}</i>\n\n"
+        f"Можешь присоединиться снова! 🔄",
         reply_markup=new_keyboard
     )
 
-# 🎯 БЫСТРАЯ ИГРА
+# 🎯 БЫСТРАЯ ИГРА - ТЕСТОВЫЙ РЕЖИМ
 @dp.callback_query(F.data == "quick_start")
 async def quick_start(callback: types.CallbackQuery):
     user_id = callback.from_user.id
@@ -145,18 +145,27 @@ async def quick_start(callback: types.CallbackQuery):
             "username": callback.from_user.username or "Без username",
             "chat_id": callback.message.chat.id
         }
-    
-    # Запускаем игру если достаточно игроков
-    if len(waiting_players) >= get_min_players():
-        await start_game_implementation(callback.message.chat.id, callback.from_user)
-        await callback.answer("🎯 Быстрая игра запущена!")
+        await callback.answer("✅ Добавлен в лобби!")
     else:
-        await callback.answer(f"❌ Нужно {get_min_players()} игроков для быстрого старта!")
+        await callback.answer("✅ Уже в лобби!")
+    
+    # ЗАПУСКАЕМ ИГРУ АВТОМАТИЧЕСКИ В ТЕСТОВОМ РЕЖИМЕ
+    if TEST_MODE:
+        # В тестовом режиме запускаем сразу с одним игроком
+        await start_game_implementation(callback.message.chat.id, callback.from_user)
+        await callback.answer("🎯 Тестовая игра запущена!")
+    else:
+        # В обычном режиме проверяем количество
+        if len(waiting_players) >= get_min_players():
+            await start_game_implementation(callback.message.chat.id, callback.from_user)
+            await callback.answer("🎯 Быстрая игра запущена!")
+        else:
+            await callback.answer(f"❌ Нужно {get_min_players()} игроков!")
 
 # 🎯 ПРАВИЛА ИГРЫ
 @dp.callback_query(F.data == "show_rules")
 async def show_rules(callback: types.CallbackQuery):
-    rules_text = """
+    rules_text = f"""
 📖 <b>ПРАВИЛА МАФИИ</b>
 
 🎯 <b>ЦЕЛИ ИГРЫ:</b>
@@ -183,7 +192,11 @@ async def show_rules(callback: types.CallbackQuery):
 • 🎉 <b>Мирные побеждают</b> - когда вся мафия изгнана
 • 🔫 <b>Мафия побеждает</b> - когда их число ≥ мирных
 
-🎮 <b>Удачи в игре!</b> 🍀
+🎮 <b>ТЕКУЩИЙ РЕЖИМ:</b>
+• <i>Тестовый: {'ВКЛЮЧЕН' if TEST_MODE else 'ВЫКЛЮЧЕН'}</i>
+• <i>Минимум игроков: {get_min_players()}</i>
+
+🎯 <b>Удачи в игре!</b> 🍀
     """
     
     await callback.message.answer(rules_text)
@@ -199,7 +212,7 @@ async def show_players(callback: types.CallbackQuery):
             f"• {player['name']} (@{player['username']})" 
             for player in waiting_players.values()
         ])
-        players_text = f"👥 <b>Игроки в лобби:</b>\n\n{players_list}"
+        players_text = f"👥 <b>Игроки в лобби ({len(waiting_players)}):</b>\n\n{players_list}"
     
     await callback.message.answer(players_text)
     await callback.answer("✅")
@@ -211,14 +224,16 @@ async def start_game_command(message: types.Message):
 
 # 🎯 РЕАЛИЗАЦИЯ ЗАПУСКА ИГРЫ
 async def start_game_implementation(chat_id, from_user):
-    if len(waiting_players) < get_min_players():
-        min_players = get_min_players()
+    min_players = get_min_players()
+    
+    if len(waiting_players) < min_players:
         await bot.send_message(
             chat_id,
             f"❌ <b>Недостаточно игроков!</b>\n\n"
-            f"👥 Сейчас: {len(waiting_players)}\n"
-            f"🎯 Нужно: {min_players}\n\n"
-            f"<i>Пригласи друзей или используй тестовый режим!</i>"
+            f"👥 Сейчас в лобби: {len(waiting_players)}\n"
+            f"🎯 Требуется: {min_players}\n\n"
+            f"<i>Тестовый режим: {'ВКЛЮЧЕН' if TEST_MODE else 'ВЫКЛЮЧЕН'}</i>\n\n"
+            f"Присоединись к игре через кнопки или пригласи друзей!"
         )
         return
     
@@ -265,7 +280,8 @@ async def start_game_implementation(chat_id, from_user):
         f"👥 <b>Участники ({len(waiting_players)} игроков):</b>\n{players_text}\n\n"
         f"🌙 <b>НОЧЬ {game['day_number']}</b>\n"
         f"<i>Город засыпает... Просыпается мафия...</i> 🕵️‍♂️\n\n"
-        f"📊 Посмотреть статус: /game_status"
+        f"📊 Посмотреть статус: /game_status\n"
+        f"🎯 <i>Тестовый режим: {'ВКЛЮЧЕН' if TEST_MODE else 'ВЫКЛЮЧЕН'}</i>"
     )
     
     # Очищаем лобби
@@ -273,7 +289,10 @@ async def start_game_implementation(chat_id, from_user):
 
 # 🎯 РАСПРЕДЕЛЕНИЕ РОЛЕЙ
 def distribute_roles(players_count):
-    if players_count == 4:
+    if players_count == 1:
+        # В тестовом режиме с одним игроком - даем роль Мафии
+        return ["mafia"]
+    elif players_count == 4:
         return ["mafia", "sheriff", "doctor", "civilian"]
     elif players_count == 5:
         return ["mafia", "sheriff", "doctor", "civilian", "civilian"]
@@ -328,7 +347,8 @@ async def game_status_command(message: types.Message):
         f"📊 <b>Фаза:</b> {'🌙 НОЧЬ' if game['phase'] == 'night' else '☀️ ДЕНЬ'} {game['day_number']}\n"
         f"👥 <b>Живых игроков:</b> {len(alive_players)}\n"
         f"🔫 <b>Мафия:</b> {mafia_count}\n"
-        f"👨‍🌾 <b>Мирные:</b> {civilian_count}\n\n"
+        f"👨‍🌾 <b>Мирные:</b> {civilian_count}\n"
+        f"🎯 <b>Тестовый режим:</b> {'ВКЛЮЧЕН' if TEST_MODE else 'ВЫКЛЮЧЕН'}\n\n"
         f"🎯 <b>Живые игроки:</b>\n" + "\n".join(alive_names)
     )
     
@@ -337,7 +357,7 @@ async def game_status_command(message: types.Message):
 # 🎯 ПОМОЩЬ
 @dp.message(Command("help"))
 async def help_command(message: types.Message):
-    help_text = """
+    help_text = f"""
 🆘 <b>ПОМОЩЬ ПО БОТУ МАФИИ</b>
 
 📋 <b>ОСНОВНЫЕ КОМАНДЫ:</b>
@@ -361,48 +381,27 @@ async def help_command(message: types.Message):
 • 🎯 Быстрый старт
 • 📊 Подробная статистика
 
-⚡ <b>ТЕКУЩИЙ РЕЖИМ:</b> <i>Тестовый (можно играть одному)</i>
+⚡ <b>ТЕКУЩИЙ РЕЖИМ:</b>
+• <i>Тестовый: {'ВКЛЮЧЕН' if TEST_MODE else 'ВЫКЛЮЧЕН'}</i>
+• <i>Минимум игроков: {get_min_players()}</i>
+
+🎯 <b>Для тестирования:</b>
+Нажми "Быстрая игра" для мгновенного старта!
     """
     
     await message.answer(help_text)
-
-# 🎯 ИНФОРМАЦИЯ О БОТЕ
-@dp.message(Command("info"))
-async def info_command(message: types.Message):
-    info_text = """
-🤖 <b>ИНФОРМАЦИЯ О БОТЕ</b>
-
-🎯 <b>ЛУЧШИЙ БОТ ДЛЯ МАФИИ В TELEGRAM!</b>
-
-<b>Особенности:</b>
-• 🚀 Современный и быстрый
-• 🎮 Простой и интуитивный интерфейс
-• 🔧 Гибкая настройка игры
-• 📱 Оптимизирован для мобильных устройств
-• 👥 Поддержка групп и каналов
-
-<b>Технологии:</b>
-• Python 3.10 + Aiogram 3.0
-• Асинхронная архитектура
-• Умные алгоритмы распределения ролей
-• Автоматическое восстановление при ошибках
-
-<b>Разработчик:</b> Создан с ❤️ для любителей Мафии
-
-📞 <b>Поддержка:</b> @mafioooznik_bot
-    """
-    
-    await message.answer(info_text)
 
 # 🎯 ОБРАБОТКА ОСТАЛЬНЫХ СООБЩЕНИЙ
 @dp.message()
 async def other_messages(message: types.Message):
     if message.text and not message.text.startswith('/'):
         await message.answer(
-            "🎮 <b>Привет! Я бот для игры в Мафию!</b>\n\n"
-            "Напиши /start чтобы начать игру или /help для справки!",
+            f"🎮 <b>Привет! Я бот для игры в Мафию!</b>\n\n"
+            f"Напиши /start чтобы начать игру или /help для справки!\n\n"
+            f"🎯 <i>Тестовый режим: {'ВКЛЮЧЕН' if TEST_MODE else 'ВЫКЛЮЧЕН'}</i>",
             reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-                [InlineKeyboardButton(text="🎮 Начать игру", callback_data="join_game")]
+                [InlineKeyboardButton(text="🎮 Начать игру", callback_data="join_game")],
+                [InlineKeyboardButton(text="🎯 Быстрая игра", callback_data="quick_start")]
             ])
         )
 
@@ -415,6 +414,7 @@ async def main():
     
     print("🎮 Бот Мафия запускается...")
     print(f"⚡ Тестовый режим: {'ВКЛЮЧЕН' if TEST_MODE else 'ВЫКЛЮЧЕН'}")
+    print(f"🎯 Минимум игроков: {get_min_players()}")
     print("🚀 Бот готов к работе!")
     
     await dp.start_polling(bot)
